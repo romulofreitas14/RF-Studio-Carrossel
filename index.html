@@ -100,7 +100,7 @@ button {
 #stage::-webkit-scrollbar-thumb:hover { background: var(--ac); }
 
 canvas {
-  height: var(--cv-zoom, 92%);
+  height: 92%;
   max-height: 96%;
   width: auto;
   border-radius: 6px;
@@ -109,11 +109,57 @@ canvas {
   cursor: grab;
   margin: auto;
   flex-shrink: 0;
-  transition: height 0.15s ease;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 canvas:active {
   cursor: grabbing;
+}
+
+/* PÍLULA FLUTUANTE DE ZOOM DO PALCO (- 100% +) */
+#zoomPill {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(24, 24, 27, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  padding: 3px 5px;
+  gap: 2px;
+  z-index: 12;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  user-select: none;
+}
+
+#zoomPill button {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--tx);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+#zoomPill button:hover, #zoomPill button:active {
+  background: var(--el);
+  color: var(--ac-light);
+}
+
+#zoomPill #zpReset {
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ac-light);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
 }
 
 /* BARRA FLUTUANTE SUPERIOR */
@@ -887,11 +933,11 @@ option {
       <button class="b fb-item" data-a="re" title="Refazer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
       </button>
-      <button class="b fb-item" data-a="zout" title="Diminuir Visualização do Palco">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <button class="b fb-item" data-a="mi" title="Diminuir Item Selecionado">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button class="b fb-item" data-a="zin" title="Aumentar Visualização do Palco">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <button class="b fb-item" data-a="pl" title="Aumentar Item Selecionado">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
       <button class="b fb-item" data-a="ed" title="Editar Item Selecionado">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -917,6 +963,13 @@ option {
 
     <div id="stage">
       <canvas id="cv"></canvas>
+    </div>
+
+    <!-- PÍLULA FLUTUANTE DE ZOOM DO PALCO (- 100% +) -->
+    <div id="zoomPill">
+      <button type="button" id="zpOut" title="Diminuir Zoom da Arte">−</button>
+      <button type="button" id="zpReset" title="Toque para restaurar 100% e centralizar">100%</button>
+      <button type="button" id="zpIn" title="Aumentar Zoom da Arte">+</button>
     </div>
   </div>
 
@@ -1456,10 +1509,38 @@ const SVG_GRIP=`<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const wt=f=>/Anton|Bebas|Six Caps|Archivo Black|Alfa Slab|Titan One|Lilita One|Righteous|Abril|Permanent|Pacifico|Great Vibes|Satisfy|Kaushan|Sacramento|Allura|Alex Brush|Courgette|Prata|League Gothic|Russo One|Passion One|Fjalla/.test(f)?400:f=='Inter'?800:700;
 
-let toastTimer, q=0, lv=0, stageZoom=92, exportMime='image/jpeg', exportScale=1;
+let toastTimer, q=0, lv=0, exportMime='image/jpeg', exportScale=1;
+let viewZoom = 1, viewPanX = 0, viewPanY = 0;
 let H=[], hi=0, saveTimer=null;
 let IM={}, uid=0;
 const nid=()=>'i'+Date.now().toString(36)+(uid++);
+
+function applyViewTransform() {
+  viewZoom = Math.max(0.4, Math.min(4, +viewZoom.toFixed(3)));
+  if (Math.abs(viewZoom - 1) < 0.02) {
+    viewZoom = 1;
+  }
+  if (viewZoom <= 1) {
+    viewPanX = 0;
+    viewPanY = 0;
+  } else {
+    const maxPanX = (cv.offsetWidth * viewZoom) * 0.55;
+    const maxPanY = (cv.offsetHeight * viewZoom) * 0.55;
+    viewPanX = Math.max(-maxPanX, Math.min(maxPanX, viewPanX));
+    viewPanY = Math.max(-maxPanY, Math.min(maxPanY, viewPanY));
+  }
+  cv.style.transform = `translate3d(${Math.round(viewPanX)}px, ${Math.round(viewPanY)}px, 0) scale(${viewZoom})`;
+  const zp = $('zpReset');
+  if (zp) zp.textContent = Math.round(viewZoom * 100) + '%';
+  rq();
+}
+
+function resetViewZoom() {
+  viewZoom = 1;
+  viewPanX = 0;
+  viewPanY = 0;
+  applyViewTransform();
+}
 
 function showToast(msg){
   const t=$('toast');
@@ -1750,7 +1831,7 @@ function drawImageRegion(targetCtx, imgObj, bx, by, bw, bh, isPreview) {
 function getDs() {
   const r = cv.getBoundingClientRect();
   if (!r.height) return 1.5;
-  return Math.max(1, Math.min(4.5, state.slideHeight / r.height));
+  return Math.max(0.45, Math.min(4.5, state.slideHeight / r.height));
 }
 
 function drawSelectionGizmo(targetCtx, bx, by, bw, bh, isLocked, allowResize=true) {
@@ -3042,14 +3123,24 @@ $('fbar').onclick = e => {
   const a = b.dataset.a;
   if(a === 'un'){ if(hi > 0) restoreState(H[--hi]); return; }
   if(a === 're'){ if(hi < H.length - 1) restoreState(H[++hi]); return; }
-  if(a === 'zout'){
-    stageZoom = Math.max(45, stageZoom - 12);
-    cv.style.setProperty('--cv-zoom', stageZoom + '%');
-    return;
-  }
-  if(a === 'zin'){
-    stageZoom = Math.min(150, stageZoom + 12);
-    cv.style.setProperty('--cv-zoom', stageZoom + '%');
+  if(a === 'mi' || a === 'pl'){
+    const factor = a === 'mi' ? 0.92 : 1.08;
+    const s = state.sel;
+    if(s && s.k === 'txt'){
+      const tx = state.slideTexts[s.slideIdx ?? state.txtIdx];
+      if(tx && !tx.lock){ tx.size = Math.max(20, Math.min(350, Math.round((tx.size || 60) * factor))); commit(); updateUI(); rq(); }
+      return;
+    }
+    if(s && s.k === 'lg'){
+      const lg = state.logos[s.logoIdx ?? 0];
+      if(lg && !lg.lock){ lg.scale = Math.max(0.05, Math.min(1, +((lg.scale || 0.25) * factor).toFixed(3))); commit(); updateUI(); renderOverlays(); rq(); }
+      return;
+    }
+    const act = state.images.find(x => x.id === state.activeImgId) || state.images[0];
+    if(act && !act.lock){
+      act.zoom = Math.max(0.15, Math.min(5, +((act.zoom || 1) * factor).toFixed(3)));
+      commit(); updateUI(); rq();
+    }
     return;
   }
   if(a === 'ed'){
@@ -3099,7 +3190,25 @@ $('fbar').onclick = e => {
     showToast(state.showSafeZone ? 'Margem segura (100px) visível' : 'Margem segura oculta');
   }
 };
-// ---- INTERAÇÃO DIRETA NO CANVAS (SELEÇÃO DE TEXTO/LOGO/FOTO, ALÇAS DE EDIÇÃO, PAN, PINÇA E SCROLL) ----
+
+// Controles da Pílula Flutuante de Zoom (- 100% +)
+$('zpOut').onclick = () => {
+  blurTextFocus();
+  viewZoom = Math.round((viewZoom - 0.15) * 20) / 20;
+  applyViewTransform();
+};
+$('zpIn').onclick = () => {
+  blurTextFocus();
+  viewZoom = Math.round((viewZoom + 0.15) * 20) / 20;
+  applyViewTransform();
+};
+$('zpReset').onclick = () => {
+  blurTextFocus();
+  resetViewZoom();
+  showToast('Visualização restaurada (100%)');
+};
+
+// ---- INTERAÇÃO DIRETA NO CANVAS (PINÇA DE ZOOM DO PALCO, SELEÇÃO DE TEXTO/LOGO/FOTO, ALÇAS E PAN) ----
 const PT = new Map();
 let cDrag = null;
 let lastTapTime = 0;
@@ -3132,8 +3241,69 @@ function getActiveSelectionBox() {
   return null;
 }
 
+// Gesto de Pinça Global no Palco (#stage) para Zoom e Pan da Arte Inteira
+const stageEl = $('stage');
+const SPT = new Map();
+let stagePinch = null;
+
+stageEl.addEventListener('pointerdown', e => {
+  SPT.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (SPT.size === 2) {
+    blurTextFocus();
+    cDrag = null;
+    GX = null; GY = null;
+    const [a, b] = [...SPT.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    stagePinch = {
+      startDist: dist,
+      startZoom: viewZoom,
+      startMidX: midX,
+      startMidY: midY,
+      startPanX: viewPanX,
+      startPanY: viewPanY
+    };
+  }
+}, { capture: true });
+
+stageEl.addEventListener('pointermove', e => {
+  if (!SPT.has(e.pointerId)) return;
+  SPT.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (SPT.size >= 2 && stagePinch) {
+    e.preventDefault();
+    e.stopPropagation();
+    const [a, b] = [...SPT.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const ratio = dist / stagePinch.startDist;
+    const nextZoom = Math.max(0.4, Math.min(4, stagePinch.startZoom * ratio));
+
+    const stageRect = stageEl.getBoundingClientRect();
+    const cx = stageRect.left + stageRect.width / 2;
+    const cy = stageRect.top + stageRect.height / 2;
+    const zoomFactor = nextZoom / stagePinch.startZoom;
+
+    viewZoom = nextZoom;
+    viewPanX = (midX - cx) - ((stagePinch.startMidX - cx - stagePinch.startPanX) * zoomFactor);
+    viewPanY = (midY - cy) - ((stagePinch.startMidY - cy - stagePinch.startPanY) * zoomFactor);
+    applyViewTransform();
+  }
+}, { capture: true, passive: false });
+
+function endStagePinch(e) {
+  SPT.delete(e.pointerId);
+  if (SPT.size < 2) {
+    stagePinch = null;
+  }
+}
+stageEl.addEventListener('pointerup', endStagePinch, { capture: true });
+stageEl.addEventListener('pointercancel', endStagePinch, { capture: true });
+
 cv.addEventListener('pointerdown', e => {
   blurTextFocus();
+  if (SPT.size >= 2 || stagePinch) return;
   cv.setPointerCapture(e.pointerId);
   const p = getCanvasCoords(e);
   PT.set(e.pointerId, p);
@@ -3180,21 +3350,6 @@ cv.addEventListener('pointerdown', e => {
         }
         return;
       }
-    }
-  }
-
-  // 2) Pinça com 2 dedos
-  if (PT.size === 2) {
-    const [a, b] = [...PT.values()];
-    const startDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-    if (state.sel && state.sel.k === 'txt') {
-      const tx = state.slideTexts[state.sel.slideIdx];
-      if (tx && !tx.lock) { cDrag = { mode: 'pinch_txt', txtObj: tx, startDist, startVal: tx.size || 60, moved: false }; return; }
-    }
-    const reg = renderedRegions.slice().reverse().find(r => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h);
-    if (reg && !reg.imgObj.lock) {
-      cDrag = { mode: 'pinch', imgObj: reg.imgObj, startDist, startZoom: reg.imgObj.zoom || 1, moved: false };
-      return;
     }
   }
 
@@ -3278,25 +3433,14 @@ cv.addEventListener('pointerdown', e => {
 });
 
 cv.addEventListener('pointermove', e => {
+  if(SPT.size >= 2 || stagePinch) return;
   if(!PT.has(e.pointerId)) return;
   const p = getCanvasCoords(e);
   PT.set(e.pointerId, p);
   if(!cDrag) return;
   GX = null; GY = null;
 
-  if(cDrag.mode === 'pinch' && PT.size === 2){
-    const [a, b] = [...PT.values()];
-    const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    cDrag.imgObj.zoom = Math.max(0.15, Math.min(5, +(cDrag.startZoom * (dist / cDrag.startDist)).toFixed(3)));
-    cDrag.moved = true;
-    rq();
-  } else if(cDrag.mode === 'pinch_txt' && PT.size === 2){
-    const [a, b] = [...PT.values()];
-    const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    cDrag.txtObj.size = Math.max(20, Math.min(350, Math.round(cDrag.startVal * (dist / cDrag.startDist))));
-    cDrag.moved = true;
-    rq();
-  } else if(cDrag.mode === 'rs_img'){
+  if(cDrag.mode === 'rs_img'){
     const dist = Math.hypot(p.x - cDrag.cx0, p.y - cDrag.cy0);
     cDrag.imgObj.zoom = Math.max(0.15, Math.min(5, +(cDrag.startVal * (dist / cDrag.startDist)).toFixed(3)));
     cDrag.moved = true;
@@ -3353,15 +3497,45 @@ function endCanvasPointer(e){
 cv.addEventListener('pointerup', endCanvasPointer);
 cv.addEventListener('pointercancel', endCanvasPointer);
 
-cv.addEventListener('wheel', e => {
-  const p = getCanvasCoords(e);
-  const r = renderedRegions.slice().reverse().find(reg => p.x >= reg.x && p.x <= reg.x + reg.w && p.y >= reg.y && p.y <= reg.y + reg.h);
-  if(r){
-    e.preventDefault();
-    state.activeImgId = r.imgObj.id;
-    r.imgObj.zoom = Math.max(0.15, Math.min(5, +((r.imgObj.zoom || 1) + (e.deltaY > 0 ? -0.06 : 0.06)).toFixed(3)));
-    commit(); renderGalleryList(); rq();
+// Zoom no PC com o Scroll do Mouse direto no palco (focado na posição do ponteiro)
+stageEl.addEventListener('wheel', e => {
+  // Se segurar Alt, dá zoom apenas dentro da foto da colagem apontada
+  if (e.altKey) {
+    const p = getCanvasCoords(e);
+    const r = renderedRegions.slice().reverse().find(reg => p.x >= reg.x && p.x <= reg.x + reg.w && p.y >= reg.y && p.y <= reg.y + reg.h);
+    if (r && !r.imgObj.lock) {
+      e.preventDefault();
+      state.activeImgId = r.imgObj.id;
+      r.imgObj.zoom = Math.max(0.15, Math.min(5, +((r.imgObj.zoom || 1) + (e.deltaY > 0 ? -0.06 : 0.06)).toFixed(3)));
+      commit(); renderGalleryList(); renderEditPane(); rq();
+    }
+    return;
   }
+
+  // Se segurar Shift (ou scroll horizontal do touchpad), permite rolar as telas horizontalmente quando em 100%
+  if (e.shiftKey && Math.abs(e.deltaX) === 0 && viewZoom <= 1) {
+    stageEl.scrollLeft += e.deltaY;
+    return;
+  }
+
+  e.preventDefault();
+  blurTextFocus();
+
+  const step = e.deltaY < 0 ? 1.12 : 0.89;
+  const nextZoom = Math.max(0.4, Math.min(4, +(viewZoom * step).toFixed(3)));
+  if (nextZoom === viewZoom) return;
+
+  const stageRect = stageEl.getBoundingClientRect();
+  const cx = stageRect.left + stageRect.width / 2;
+  const cy = stageRect.top + stageRect.height / 2;
+  const mx = e.clientX - cx;
+  const my = e.clientY - cy;
+  const zoomFactor = nextZoom / viewZoom;
+
+  viewZoom = nextZoom;
+  viewPanX = mx - (mx - viewPanX) * zoomFactor;
+  viewPanY = my - (my - viewPanY) * zoomFactor;
+  applyViewTransform();
 }, { passive: false });
 
 // ---- EXPORTAÇÃO (ZIP, SEPARADAS E PDF MULTIPÁGINAS) ----
